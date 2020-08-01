@@ -1,0 +1,737 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Collections;
+using CTree;
+namespace CTree
+{
+    class NodeDate
+    {
+        public string _dataName;
+        public NodeDate(string name)
+        {
+            _dataName = name;
+        }
+        public void ShowData()
+        {
+            Console.WriteLine(_dataName);
+        }
+    }
+    public enum NodeType
+    {
+        NORMAL = 1,             //动作节点
+        SEQUENCE = 2,           //序列节点
+        SELECTOR = 3,           //重复节点
+        REPEAT = 4,             //选择节点
+        PARALLER_SEL = 5,       //并行选择
+        PARALLER_SEQ = 6,       //并行序列
+        RANDOMNODE   = 7        //在子节点中随机选择一个节点
+    }
+    public enum NodeState
+    {
+        SUCCESS = 1,           //成功状态
+        FALIER = 2,           //失败状态
+        WAITING = 3,           //等待状态
+        ERROR = 4,            //错误状态
+        PREPARE = 5,           //准备状态
+        MAX = 6                //最大状态个数
+    }
+    class CTNode
+    {
+        protected List<CTNode> _paraller = null;              //并行节点
+        protected List<CTNode> _childs = null;                //子节点
+        protected NodeDate _data = null;                     //数据节点
+        protected NodeType _nodeType = NodeType.NORMAL;      //默认节点类型为正常类型.
+        protected NodeState _nodeState = NodeState.PREPARE;  //默认节点可执行节点
+        public int _repeatCount = 0;                       //重复节点专有
+        public NodeState _NodeState { get { return _nodeState; } }
+        public NodeType _NodeType { get { return _nodeType; } set { _nodeType = value; } }
+        public NodeDate Data { set { _data = value; } }
+        public CTNode()
+        {
+            _childs = new List<CTNode>();
+            _paraller = new List<CTNode>();
+            _data = new NodeDate("");
+            _nodeState = NodeState.PREPARE;
+            _nodeType = NodeType.NORMAL;
+        }
+        public CTNode(string name)
+        {
+            _childs = new List<CTNode>();
+            _paraller = new List<CTNode>();
+            _data = new NodeDate(name);
+            _nodeState = NodeState.PREPARE;
+            _nodeType = NodeType.NORMAL;
+        }
+
+        public void AddParaller(CTNode node) //添加并行结构
+        {
+            if (_nodeType == NodeType.PARALLER_SEL || _nodeType == NodeType.PARALLER_SEQ)
+            {//可以添加并行节点
+                _paraller.Add(node);
+            }
+        }
+        public virtual void AddNode(CTNode node) //添加子结构
+        {
+            if (null == node)
+            {
+                return;
+            }
+            _childs.Add(node);
+        }
+        public void PreOrderVisit() //遍历单一控制流，不包含并行
+        {
+            _data.ShowData();
+            for (int i = 0; i < _childs.Count; i++)
+            {
+                CTNode tNode = _childs [i] ;
+                tNode.PreOrderVisit();
+            }
+        }
+        public void PreOrderVisitParaller() //遍历单一控制流，包含并行
+        {
+            _data.ShowData();
+            for (int i = 0; i < _childs.Count; i++)
+            {
+                CTNode tNode = _childs [i] ;
+                tNode.PreOrderVisitParaller();
+            }
+            for (int i=0; i < _paraller.Count; i++)
+            {
+                CTNode tNode = _paraller [i] ;
+                tNode.PreOrderVisitParaller();
+            }
+        }
+
+        public virtual NodeState DoAction() //执行节点
+        {
+            _data.ShowData();
+            _nodeState = NodeState.SUCCESS;
+            return _nodeState;
+        }
+        /*
+        public NodeState RefreshNode()
+        {
+            if (_nodeType == NodeType.NORMAL) //普通节点返回执行的状态
+            {
+                _nodeState = DoAction();
+                return _nodeState;
+            }
+            else if (_nodeType == NodeType.SEQUENCE) //序列节点
+            {
+                NodeState nss = NodeState.WAITING;
+                _nodeState = NodeState.WAITING; //等待子节点进行
+                for (int i = 0; i < _childs.Count; i++)
+                {
+                    CTNode child = _childs [i] ;
+                    if (NodeState.PREPARE == child._NodeState || NodeState.WAITING == child._NodeState)
+                    {//子节点可以执行
+                        nss = child.RefreshNode();//执行子节点
+                        if (nss == NodeState.FALIER) //执行失败，后面的节点不执行
+                        {
+                            _nodeState = nss;
+                            return _nodeState;
+                        }
+                        else if (nss == NodeState.SUCCESS) //当前节点子节点执行成功
+                        {
+                            if (i == _childs.Count - 1) //当前节点时最后一个节点
+                            {
+                                _nodeState = NodeState.SUCCESS; //所有节点都成功执行
+                                return _nodeState; //所有节点成功执行返回TRUE，否则继续执行.
+                            }
+                        }
+                        else if (nss == NodeState.WAITING)
+                        {
+                            return NodeState.WAITING;
+                        }
+                    }
+                }
+                _nodeState = NodeState.SUCCESS; //没有子节点直接返回成功
+                return _nodeState;
+            }
+            else if (_nodeType == NodeType.SELECTOR)
+            {
+                NodeState nss = NodeState.WAITING;
+                _nodeState = NodeState.WAITING; //等待子节点进行
+                for (int i = 0; i < _childs.Count; i++)
+                {
+                    CTNode child = _childs [i] ;
+                    if (NodeState.PREPARE == child._NodeState || NodeState.WAITING == child._NodeState)
+                    {//子节点可以执行
+                        nss = child.RefreshNode();//执行子节点
+                        if (nss == NodeState.SUCCESS) //执行成功，后面的节点不执行
+                        {
+                            _nodeState = nss;
+                            return _nodeState;
+                        }
+                        else if (nss == NodeState.FALIER) //当前节点子节点执行成功
+                        {
+                            if (i == _childs.Count - 1) //当前节点时最后一个节点
+                            {
+                                _nodeState = NodeState.FALIER; //所有节点都失败执行
+                                return _nodeState; //所有节点成功执行返回TRUE，否则执行后面的节点
+                            }
+                        }
+                        else if (nss == NodeState.WAITING)
+                        {
+                            return NodeState.WAITING;
+                        }
+                    }
+                }
+                _nodeState = NodeState.SUCCESS;
+                return _nodeState;
+            }
+            else if (_nodeType == NodeType.REPEAT)
+            {
+                //条件成立
+                if (_childs.Count > 0 && _repeatCount > 0)
+                {
+                    _nodeState = _childs[0].RefreshNode();
+                    if (_nodeState == NodeState.WAITING)
+                    {
+                        return NodeState.WAITING;
+                    }
+                    else
+                    {
+                        _repeatCount = _repeatCount - 1;
+                        _childs[0].ResetState();
+                        if (_repeatCount > 0)
+                        {
+                            _nodeState = NodeState.WAITING;
+                            return RefreshNode();
+                        }
+                        else
+                        {
+                            _nodeState = NodeState.SUCCESS;
+                            return _nodeState;
+                        }
+                    }
+                }
+                _nodeState = NodeState.SUCCESS;
+                return _nodeState;
+            }
+            else if (_nodeType == NodeType.PARALLER_SEL)
+            {
+                
+                for(int i = 0; i < _paraller.Count; i++)
+                {
+                    NodeState nss = _paraller [i] .RefreshNode();
+                }
+                
+            }
+            else if (_nodeType == NodeType.PARALLER_SEQ)
+            {
+                
+                for (int i = 0; i < _paraller.Count; i++)
+                {
+                    NodeState nss = _paraller [i] .RefreshNode();
+                }
+            }
+            else
+            {
+                Console.WriteLine("Execute error!");
+            }
+            NodeState ns = _nodeState;
+            return ns;
+        }*/
+        public void ResetState()  //子结构需要重新执行的能力时进行执行
+        {
+            _nodeState = NodeState.PREPARE;
+            for (int i = 0; i < _childs.Count; i++)
+            {
+                _childs [i] .ResetState();
+            }
+            for (int i = 0; i < _paraller.Count; i++)
+            {
+                _paraller [i] .ResetState();
+            }
+        }
+
+        public void _Start() //生命周期Start的时候请执行
+        {
+            OnStart();
+            for(int i=0; i < _childs.Count; i++)
+            {
+                _childs [i] ._Start();
+            }
+            for(int i=0; i < _paraller.Count; i++)
+            {
+                _paraller [i] ._Start();
+            }
+        }
+        public virtual void OnStart()
+        {
+
+        }
+
+        public void _End() //生命周期End的时候请执行
+        {
+            OnEnd();
+            for (int i = 0; i < _childs.Count; i++)
+            {
+                _childs [i] ._Start();
+            }
+            for (int i = 0; i < _paraller.Count; i++)
+            {
+                _paraller [i] ._Start();
+            }
+        }
+        public virtual void OnEnd()
+        {
+
+        }
+        public virtual NodeState Update() //生命周期Update的时候请执行
+        {
+            return NodeState.SUCCESS;
+        }
+    }
+
+    class CTSequenceNode : CTNode          //seq序列
+    {
+        public CTSequenceNode(): base()
+        {
+            _nodeType = NodeType.SEQUENCE;
+        }
+        public CTSequenceNode(string n)
+            : base(n)
+        {
+            _nodeType = NodeType.SEQUENCE;
+        }
+        public override NodeState Update()
+        {
+            NodeState nss = NodeState.WAITING;
+            _nodeState = NodeState.WAITING; //等待子节点进行
+            for (int i = 0; i < _childs.Count; i++)
+            {
+                CTNode child = _childs [i] ;
+                if (NodeState.PREPARE == child._NodeState || NodeState.WAITING == child._NodeState)
+                {//子节点可以执行
+                    nss = child.Update();//执行子节点
+                    if (nss == NodeState.FALIER) //执行失败，后面的节点不执行
+                    {
+                        _nodeState = nss; //状态设置为失败,并且执行结束
+                        return _nodeState;
+                    }
+                    else if (nss == NodeState.SUCCESS) //当前节点子节点执行成功
+                    {
+                        if (i == _childs.Count - 1) //当前节点时最后一个节点
+                        {
+                            _nodeState = NodeState.SUCCESS; //所有节点都成功执行
+                            return _nodeState; //所有节点成功执行返回TRUE，否则继续执行.
+                        }
+                    }
+                    else if (nss == NodeState.WAITING)
+                    {
+                        return NodeState.WAITING;
+                    }
+                }
+            }
+            //没有子节点直接返回成功
+            _nodeState = NodeState.SUCCESS; //没有子节点直接返回成功
+            return _nodeState;
+        }
+    }
+    class RandomNode : CTNode              //在子节点中随机选择执行节点.
+    {
+        int idx = 0;
+        public RandomNode() : base()
+        {
+            _nodeType = NodeType.RANDOMNODE;
+        }
+        
+        public RandomNode(string n) : base(n)
+        {
+            _nodeType = NodeType.RANDOMNODE;
+        }
+
+        public override NodeState Update()
+        {
+            if(_childs.Count <= 0)
+            {
+                return NodeState.SUCCESS; //没有子节点，直接返回成功.
+            }
+            //存在子节点.
+          
+            if(_nodeState == NodeState.PREPARE)
+            {
+                idx = _childs.Count - 1; // !!! 请在具体的应用下换成对应的随机数.
+                _nodeState = _childs [idx] .Update();
+                return _nodeState;
+            }
+            else if(_nodeState == NodeState.WAITING)
+            {
+                //之前节点的
+                _nodeState = _childs [idx] .Update();
+                return _nodeState;
+            }
+            return NodeState.SUCCESS; //返回执行成功.
+        }
+    }
+    class CTSelectorNode : CTNode           //当执行完一个真节点后返回
+    {
+        public CTSelectorNode()
+            : base()
+        {
+            _nodeType = NodeType.SELECTOR;
+        }
+        public CTSelectorNode(string n)
+            : base(n)
+        {
+            _nodeType = NodeType.SELECTOR;
+        }
+        public override NodeState Update()
+        {
+            NodeState nss = NodeState.WAITING;
+            _nodeState = NodeState.WAITING; //等待子节点进行
+            for (int i = 0; i < _childs.Count; i++)
+            {
+                CTNode child = _childs [i] ;
+                if (NodeState.PREPARE == child._NodeState || NodeState.WAITING == child._NodeState)
+                {//子节点可以执行
+                    nss = child.Update();//执行子节点
+                    if (nss == NodeState.SUCCESS) //执行成功，后面的节点不执行
+                    {
+                        _nodeState = nss;
+                        return _nodeState;
+                    }
+                    else if (nss == NodeState.FALIER) //当前节点子节点执行成功
+                    {
+                        if (i == _childs.Count - 1) //当前节点时最后一个节点
+                        {
+                            _nodeState = NodeState.FALIER; //所有节点都失败执行
+                            return _nodeState; //所有节点成功执行返回TRUE，否则执行后面的节点
+                        }
+                    }
+                    else if (nss == NodeState.WAITING)
+                    {
+                        return NodeState.WAITING;
+                    }
+                }
+            }
+            //没有要执行的子结点，则直接返回成功
+            _nodeState = NodeState.SUCCESS;
+            return _nodeState;
+        }
+    }
+    class CTRepeatNode : CTNode            //重复执行首节点repeatCount次
+    {
+        public CTRepeatNode()
+            : base()
+        {
+            _nodeType = NodeType.REPEAT;
+        }
+        public CTRepeatNode(string n)
+            : base(n)
+        {
+            _nodeType = NodeType.REPEAT;
+        }
+        public override NodeState Update()
+        {
+            _nodeState = NodeState.WAITING;
+            //条件成立
+            if (_childs.Count > 0 && _repeatCount > 0)
+            {
+                _nodeState = _childs[0].Update();
+                if (_nodeState == NodeState.WAITING)
+                {
+                    return NodeState.WAITING;
+                }
+                else
+                {
+                    //每个update之多执行一次子节点
+                    _repeatCount = _repeatCount - 1;
+                    _childs[0].ResetState();
+                    _nodeState = NodeState.WAITING;
+                    return _nodeState;
+                    /* 在一次update中执行完所有的repeat [不科学] 
+                    _repeatCount = _repeatCount - 1;
+                    _childs[0].ResetState();
+                    _nodeState = Update();
+                    return _nodeState;
+                    */
+                }
+            }
+            _nodeState = NodeState.SUCCESS;
+            return _nodeState;
+        }
+    }
+ class CTNormalNode : CTNode                       //非结构控制节点，作为拓展节点
+    {
+        public CTNormalNode()
+            : base()
+        {
+            _nodeType = NodeType.NORMAL;
+        }
+        public CTNormalNode(string n)
+            : base(n)
+        {
+            _nodeType = NodeType.NORMAL;
+        }
+        public override NodeState DoAction()
+        {
+            _nodeState = base.DoAction();
+            return _nodeState;
+        }
+        public override NodeState Update()
+        {
+            _nodeState = DoAction();
+            return _nodeState;
+        }
+    }
+    class CTParllerSequence : CTNode                   //并行节点.等待全部执行完毕，全真为真，否则为假.
+    {
+        private int[] stateCount;
+        public CTParllerSequence()
+            : base()
+        {
+            stateCount = new int[(int)NodeState.MAX];
+            _nodeType = NodeType.PARALLER_SEQ;
+            for (int i = 0; i < stateCount.Length; i++)
+            {
+                stateCount [i]  = 0;
+            }
+        }
+        public CTParllerSequence(string n)
+            : base(n)
+        {
+            stateCount = new int[(int)NodeState.MAX];
+            _nodeType = NodeType.PARALLER_SEQ;
+            for (int i = 0; i < stateCount.Length; i++)
+            {
+                stateCount [i]  = 0;
+            }
+        }
+        public override void AddNode(CTNode node)
+        {
+            AddParaller(node);
+        }
+        public override NodeState Update()
+        {
+            _nodeState = NodeState.WAITING;
+            stateCount[(int)NodeState.WAITING] = 0;
+            for (int i = 0; i < _paraller.Count; i++)
+            {
+                if (_paraller [i] ._NodeState == NodeState.WAITING || _paraller [i] ._NodeState == NodeState.PREPARE)
+                {
+                    NodeState nss = _paraller [i] .Update();
+                    stateCount[(int)nss]++;
+                }
+            }
+            if (stateCount[(int)NodeState.WAITING] > 0)
+            {
+                _nodeState = NodeState.WAITING;//存在没有执行完的节点
+                return _nodeState;
+            }
+            for (int i = 0; i < stateCount.Length; i++)
+            {
+                stateCount [i]  = 0;
+            }
+            if (stateCount[(int)NodeState.SUCCESS] == _paraller.Count)
+            {
+                _nodeState = NodeState.SUCCESS;
+                return _nodeState;
+            }
+            else
+            {
+                _nodeState = NodeState.FALIER;
+                return _nodeState;
+            }
+        }
+        
+    }
+    class CTParllerSelector : CTNode                  //并行节点等待全部执行完毕全假为假，否则为真.
+    {
+        private int[] stateCount;
+        public CTParllerSelector()
+            : base()
+        {
+            stateCount = new int[(int)NodeState.MAX];
+            _nodeType = NodeType.PARALLER_SEL;
+            for (int i = 0; i < stateCount.Length; i++)
+            {
+                stateCount [i]  = 0;
+            }
+        }
+
+        public CTParllerSelector(string n) : base(n) 
+        {
+            stateCount = new int[(int)NodeState.MAX];
+            _nodeType = NodeType.PARALLER_SEL;
+            for (int i = 0; i < stateCount.Length; i++)
+            {
+                stateCount [i]  = 0;
+            }
+        }
+        public override void AddNode(CTNode node)
+        {
+            AddParaller(node);
+        }
+        public override NodeState Update()
+        {
+            _nodeState = NodeState.WAITING;
+            stateCount[(int)NodeState.WAITING] = 0;
+            for (int i = 0; i < _paraller.Count; i++)
+            {
+                if (_paraller [i] ._NodeState == NodeState.WAITING || _paraller [i] ._NodeState == NodeState.PREPARE)
+                {
+                    NodeState nss = _paraller [i] .Update();
+                    stateCount[(int)nss]++;
+                }
+            }
+            if (stateCount[(int)NodeState.WAITING] > 0)
+            {
+                _nodeState = NodeState.WAITING;//存在没有执行完的节点
+                return _nodeState;
+            }
+            for (int i = 0; i < stateCount.Length; i++)
+            {
+                stateCount [i]  = 0;
+            }
+            if (stateCount[(int)NodeState.FALIER] == _paraller.Count)
+            {
+                _nodeState = NodeState.FALIER;
+                return _nodeState;
+            }
+            else
+            {
+                _nodeState = NodeState.SUCCESS;
+                return _nodeState;
+            }
+        }
+    }
+
+    class ReturnFalier : CTNormalNode
+    {
+        public ReturnFalier() : base()
+        {
+
+        }
+        public ReturnFalier(string n) : base(n)
+        {
+
+        }
+        public override NodeState DoAction()
+        {
+            base.DoAction();
+            return NodeState.FALIER;
+        }
+    }
+    class ReturnSuccess : CTNormalNode
+    {
+        public override NodeState DoAction()
+        {
+            return NodeState.SUCCESS;
+        }
+    }
+
+    class CTree
+    {
+        public CTNode _start = null;
+        public string name; //名称
+        public CTree()
+        {
+
+        }
+        public CTree(CTNode startNode,string tName)
+        {
+            _start = startNode;
+            name = tName;
+        }
+        public void OnUpdate()
+        {
+            if(null == _start)
+            {
+                Console.WriteLine("Error state null start node!");
+            }
+            NodeState nss = _start._NodeState;
+            switch(nss)
+            {
+                case NodeState.PREPARE:
+                case NodeState.WAITING:
+                    nss = _start.Update();
+                    break;
+                default:
+                    nss = NodeState.ERROR;
+                    break;
+            }
+            switch(nss)
+            {
+                case NodeState.SUCCESS:
+                case NodeState.FALIER:
+                    OnComplete(); //执行完毕
+                break;
+            }
+        }
+        public void OnComplete()
+        {
+            if (null != _start)
+            {
+                _start.ResetState();
+            }
+        }
+    }
+    class WaitMinute : CTNormalNode       //拓展的基础结点.等待五个执行次序.
+    {
+        int count = 5;
+        public WaitMinute(string n) : base(n)
+        {
+            
+        }
+        public override NodeState DoAction()
+        {
+            if(count > 0)
+            {
+                Console.WriteLine("Action:" + count);
+                count--;
+                if (count > 0)
+                {
+                    return NodeState.WAITING;
+                }
+                else
+                {
+                    return NodeState.SUCCESS;
+                }
+            }
+            return NodeState.SUCCESS;
+        }
+    }
+}
+namespace ConsoleApplication7
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+           CTNode [] nodes = new CTNode[10];
+           nodes[0] = new CTParllerSequence("0");
+           nodes[1] = new WaitMinute("1");
+           nodes[2] = new CTSelectorNode("2");
+           nodes[3] = new CTNormalNode("3");
+           nodes[8] = new CTRepeatNode("8");
+           nodes[8]._repeatCount = 3;
+           nodes[8].AddNode(nodes[2]);
+           nodes[0].AddParaller(nodes[1]);
+           nodes[0].AddParaller(nodes[8]);
+           nodes[0].AddParaller(nodes[3]);
+           //nodes[4] = new CTNormalNode("4");
+           nodes[4] = new ReturnFalier("4");
+           nodes[5] = new CTNormalNode("5");
+           //nodes[5] = new ReturnFalier("5");
+            nodes[6] = new CTNormalNode("6");
+           nodes[2].AddNode(nodes[4]);
+           nodes[2].AddNode(nodes[5]);
+           nodes[2].AddNode(nodes[6]);
+           NodeState nss = NodeState.WAITING;
+           do
+           {
+             nss = nodes[0].Update();
+             Console.WriteLine("fin!");
+           }
+           while (nss == NodeState.WAITING);  //状态为waiting则说明存在没有执行完毕的节点.
+           //Console.WriteLine("finished!");
+           Console.ReadKey();
+        }
+    }
+}
